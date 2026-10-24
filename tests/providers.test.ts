@@ -282,6 +282,12 @@ describe('provider configuration', () => {
     expect(c.kimi).toMatchObject({ apiKey: 'k', model: 'kimi-k2.6', apiBase: 'https://api.moonshot.ai/v1', alternateBases: ['https://api.moonshot.cn/v1'] });
   });
 
+  it('reads several Gemini models from GEMINI_MODEL (first preferred, rest fallbacks)', () => {
+    const c = readConfig({ GEMINI_MODEL: ' m1, m2 ,m1,m3' });
+    expect(c.gemini).toMatchObject({ model: 'm1', fallbackModels: ['m2', 'm3'], modelIsDefault: false });
+    expect(readConfig({}).gemini).toMatchObject({ model: 'gemini-3.5-flash', fallbackModels: ['gemini-3-flash-preview'] });
+  });
+
   it('honours explicit models, endpoints and backends', () => {
     const c = readConfig({ GEMINI_BACKEND: 'vertex', KIMI_API_BASE: 'https://api.moonshot.cn/v1', KIMI_MODEL: 'kimi-k2.5', DEEPSEEK_THINKING: 'enabled', KIMI_THINKING: 'default' });
     expect(c.gemini.apiBase).toBe('https://aiplatform.googleapis.com/v1');

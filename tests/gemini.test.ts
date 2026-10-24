@@ -142,3 +142,28 @@ describe('GeminiClient on Vertex AI express mode', () => {
     expect(JSON.parse(init.body).generationConfig.maxOutputTokens).toBeLessThanOrEqual(16);
   });
 });
+
+describe('GeminiClient model fallback', () => {
+  const quota = () => errResponse(429, body('RESOURCE_EXHAUSTED', 'quota', [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '40s' }]));
+  it('moves to the next model when the first is out of quota, without waiting', async () => {
+    const f = vi.fn().mockResolvedValueOnce(quota()).mockResolvedValueOnce(okResponse('{"answer":"from b"}'));
+    const r = await client(f, { model: 'model-a', fallbackModels: ['model-b'] }).generateJson(req);
+    expect(r.data).toEqual({ answer: 'from b' });
+    expect(r.usage.note).toBe('Answered by Gemini model model-b because model-a failed (AI_QUOTA_EXCEEDED).');
+    expect(f.mock.calls.map((c) => String(c[0]).match(/models\/([^:]+):/)![1])).toEqual(['model-a', 'model-b']);
+  });
+  it('tries every model, then reports the last failure', async () => {
+    const f = vi.fn().mockImplementation(async () => quota());
+    await expect(client(f, { model: 'a', fallbackModels: ['b', 'c'] }).generateJson(req)).rejects.toMatchObject({ code: 'AI_QUOTA_EXCEEDED' });
+    expect(f).toHaveBeenCalledTimes(3);
+  });
+  it('does not switch models for a bad key (all models share it)', async () => {
+    const f = vi.fn().mockImplementation(async () => errResponse(401, body('UNAUTHENTICATED', 'x')));
+    await expect(client(f, { model: 'a', fallbackModels: ['b'] }).generateJson(req)).rejects.toMatchObject({ code: 'AI_KEY_INVALID' });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+  it('skips a retired model (404) and uses the next', async () => {
+    const f = vi.fn().mockResolvedValueOnce(errResponse(404, body('NOT_FOUND', 'gone'))).mockResolvedValueOnce(okResponse('{"answer":"ok"}'));
+    await expect(client(f, { model: 'old', fallbackModels: ['new'] }).generateJson(req)).resolves.toMatchObject({ data: { answer: 'ok' } });
+  });
+});

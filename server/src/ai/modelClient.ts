@@ -18,6 +18,8 @@ export interface ModelJsonRequest<T extends z.ZodTypeAny> {
 export interface ModelUsage {
   promptTokens?: number;
   outputTokens?: number;
+  /** Set when a fallback model answered; shown to the user as a warning. */
+  note?: string;
 }
 
 export interface ModelClient {

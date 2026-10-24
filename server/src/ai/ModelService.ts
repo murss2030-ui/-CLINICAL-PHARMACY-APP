@@ -86,8 +86,8 @@ export class ModelService implements AIProvider {
     schema: T,
     temperature?: number,
   ): Promise<{ data: z.infer<T>; warnings: string[] }> {
-    const { data } = await this.client.generateJson({ system, parts, schema, temperature });
-    return { data, warnings: [] };
+    const { data, usage } = await this.client.generateJson({ system, parts, schema, temperature });
+    return { data, warnings: usage.note ? [usage.note] : [] };
   }
 
   // ───────── document intake ─────────

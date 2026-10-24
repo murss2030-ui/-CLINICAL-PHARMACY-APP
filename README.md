@@ -97,7 +97,7 @@ All variables are **server-side**. Nothing here is bundled into the browser or t
 | Variable | Default | Purpose |
 |---|---|---|
 | `GEMINI_API_KEY` | — | Gemini key (https://aistudio.google.com/apikey; new keys start with `AQ.`). Text, page images and voice notes. With no provider key at all, real-case AI features return *GEMINI API KEY NOT CONFIGURED*; demo cases still work. |
-| `GEMINI_MODEL` | `gemini-3.5-flash` | Any current Gemini model with image input. Google retires versions over time — see *Choosing the model*. |
+| `GEMINI_MODEL` | `gemini-3.5-flash,gemini-3-flash-preview` | One or more Gemini models, comma-separated. The first is preferred; when it is out of quota, overloaded or retired, the next is used automatically (each model has its own free quota). Any current model with image input works; Google retires versions over time — see *Choosing the model*. |
 | `GEMINI_BACKEND` | `studio` | `studio` = Google AI Studio (`generativelanguage.googleapis.com`); `vertex` = Vertex AI express mode (`aiplatform.googleapis.com`; the key's Cloud project needs the Vertex AI API enabled). |
 | `DEEPSEEK_API_KEY` | — | DeepSeek key (https://platform.deepseek.com; needs account credit). Text tasks only. |
 | `DEEPSEEK_MODEL` | `deepseek-v4-flash` | If the key does not offer the default, the server uses the newest `deepseek-v*-flash` it lists. An explicit value is used as written. |

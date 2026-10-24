@@ -19,7 +19,7 @@ export type ThinkingMode = 'enabled' | 'disabled' | undefined;
 export interface ServerConfig {
   port: number;
   nodeEnv: string;
-  gemini: ProviderConfig & { backend: GeminiBackend };
+  gemini: ProviderConfig & { backend: GeminiBackend; fallbackModels: string[] };
   deepseek: ProviderConfig & { thinking: ThinkingMode };
   kimi: ProviderConfig & { visionModel: string | undefined; alternateBases: string[]; thinking: ThinkingMode };
   openai: ProviderConfig;
@@ -36,6 +36,8 @@ export interface ServerConfig {
 }
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
+/** Used after DEFAULT_GEMINI_MODEL when GEMINI_MODEL is not set. */
+export const DEFAULT_GEMINI_FALLBACKS = ['gemini-3-flash-preview'];
 export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 export const DEFAULT_KIMI_MODEL = 'kimi-k2.6';
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini';
@@ -87,13 +89,16 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const backend = geminiBackend(env.GEMINI_BACKEND);
   const kimiBase = text(env.KIMI_API_BASE) ?? text(env.MOONSHOT_API_BASE);
   const kimiModel = text(env.KIMI_MODEL);
+  // GEMINI_MODEL may list several models separated by commas: the first is preferred, the rest are fallbacks.
+  const geminiModels = [...new Set((env.GEMINI_MODEL ?? '').split(',').map((m) => m.trim()).filter(Boolean))];
   return {
     port: int(env.PORT, 8787, 1, 65535),
     nodeEnv: env.NODE_ENV ?? 'development',
     gemini: {
       apiKey: text(env.GEMINI_API_KEY),
-      model: text(env.GEMINI_MODEL) ?? DEFAULT_GEMINI_MODEL,
-      modelIsDefault: !text(env.GEMINI_MODEL),
+      model: geminiModels[0] ?? DEFAULT_GEMINI_MODEL,
+      fallbackModels: geminiModels.length ? geminiModels.slice(1) : DEFAULT_GEMINI_FALLBACKS,
+      modelIsDefault: !geminiModels.length,
       backend,
       apiBase: text(env.GEMINI_API_BASE) ?? GEMINI_API_BASES[backend],
     },

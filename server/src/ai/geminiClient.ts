@@ -9,6 +9,9 @@ import { AIError, describeNetworkError, mapGeminiHttpError, redact } from './err
 import { toGeminiSchema } from './jsonSchema';
 import { generateValidatedJson, type ModelClient, type ModelJsonRequest, type ModelUsage } from './modelClient';
 
+/** Failures of one model that another model of the same key may avoid. */
+const NEXT_MODEL = new Set<string>(['AI_QUOTA_EXCEEDED', 'AI_MODEL_NOT_FOUND', 'AI_SERVICE_UNAVAILABLE', 'AI_TIMEOUT', 'AI_RESPONSE_INVALID']);
+
 export type GeminiBackend = 'studio' | 'vertex';
 
 export const GEMINI_API_BASES: Record<GeminiBackend, string> = {
@@ -19,6 +22,8 @@ export const GEMINI_API_BASES: Record<GeminiBackend, string> = {
 export interface GeminiClientOptions {
   apiKey: string | undefined;
   model: string;
+  /** Tried in order when `model` is out of quota, overloaded or unavailable (each model has its own quota). */
+  fallbackModels?: string[];
   /** Defaults to Google AI Studio. */
   backend?: GeminiBackend;
   apiBase: string;
@@ -68,8 +73,8 @@ export class GeminiClient implements ModelClient {
     return this.opts.backend ?? 'studio';
   }
 
-  private modelUrl(): string {
-    const model = encodeURIComponent(this.opts.model);
+  private modelUrl(modelId: string = this.opts.model): string {
+    const model = encodeURIComponent(modelId);
     return this.backend === 'vertex' ? `${this.opts.apiBase}/publishers/google/models/${model}` : `${this.opts.apiBase}/models/${model}`;
   }
 
@@ -93,19 +98,34 @@ export class GeminiClient implements ModelClient {
   async generateJson<T extends z.ZodTypeAny>(req: ModelJsonRequest<T>): Promise<{ data: z.infer<T>; usage: ModelUsage }> {
     this.requireKey();
     const responseJsonSchema = toGeminiSchema(req.schema);
-    return generateValidatedJson(req, (parts) => this.generate({ ...req, parts }, responseJsonSchema), {
-      label: 'Gemini',
-      maxRetries: this.opts.maxRetries,
-      sleep: this.opts.sleep,
-      log: this.opts.log,
-    });
+    const models = [this.opts.model, ...(this.opts.fallbackModels ?? [])];
+    let failed: { model: string; error: AIError } | undefined;
+    for (const [i, model] of models.entries()) {
+      const last = i === models.length - 1;
+      try {
+        const out = await generateValidatedJson(req, (parts) => this.generate(model, { ...req, parts }, responseJsonSchema), {
+          label: `Gemini ${model}`,
+          // Waiting out a quota window is pointless while another model can answer.
+          maxRetries: last ? this.opts.maxRetries : 0,
+          sleep: this.opts.sleep,
+          log: this.opts.log,
+        });
+        return i === 0 ? out : { ...out, usage: { ...out.usage, note: `Answered by Gemini model ${model} because ${models[0]} failed (${failed!.error.code}).` } };
+      } catch (err) {
+        const error = err instanceof AIError ? err : new AIError('SERVER_ERROR', { provider: 'gemini' });
+        if (last || !NEXT_MODEL.has(error.code)) throw error;
+        failed ??= { model, error };
+        this.opts.log?.(`Gemini model ${model} failed (${error.code}); trying ${models[i + 1]}`);
+      }
+    }
+    throw failed!.error;
   }
 
   private requireKey(): void {
     if (!this.opts.apiKey) throw new AIError('AI_KEY_NOT_CONFIGURED', { provider: 'gemini' });
   }
 
-  private async generate(req: ModelJsonRequest<z.ZodTypeAny>, responseJsonSchema: Record<string, unknown>): Promise<{ text: string; usage: ModelUsage }> {
+  private async generate(model: string, req: ModelJsonRequest<z.ZodTypeAny>, responseJsonSchema: Record<string, unknown>): Promise<{ text: string; usage: ModelUsage }> {
     const body = {
       systemInstruction: { parts: [{ text: req.system }] },
       contents: [{ role: 'user', parts: req.parts }],
@@ -116,7 +136,7 @@ export class GeminiClient implements ModelClient {
         maxOutputTokens: req.maxOutputTokens ?? 16_384,
       },
     };
-    const reply = await this.send(`${this.modelUrl()}:generateContent`, { method: 'POST', body: JSON.stringify(body) }, this.opts.timeoutMs);
+    const reply = await this.send(`${this.modelUrl(model)}:generateContent`, { method: 'POST', body: JSON.stringify(body) }, this.opts.timeoutMs);
     if (!reply.ok) throw mapGeminiHttpError(reply.status, reply.raw, reply.retryAfter);
 
     let json: GenerateResponse;

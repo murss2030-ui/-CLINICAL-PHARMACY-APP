@@ -24,7 +24,7 @@ function providerSummary(): string[] {
   return router.order.map((name, i) => {
     const p = config[name];
     const label = PROVIDER_INFO[name].label;
-    return p.apiKey ? `AI provider ${i + 1}: ${label} configured (model ${p.model})` : `AI provider ${i + 1}: ${label} not configured (${PROVIDER_INFO[name].keyEnv})`;
+    return p.apiKey ? `AI provider ${i + 1}: ${label} configured (model ${[p.model, ...('fallbackModels' in p ? (p.fallbackModels as string[]) : [])].join(', ')})` : `AI provider ${i + 1}: ${label} not configured (${PROVIDER_INFO[name].keyEnv})`;
   });
 }
 

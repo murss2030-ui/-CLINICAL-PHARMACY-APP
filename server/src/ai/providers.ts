@@ -19,7 +19,7 @@ export function buildRouter(config: ServerConfig, log?: (msg: string) => void): 
   const common = { timeoutMs: config.aiTimeoutMs, maxRetries: config.aiMaxRetries, log };
   const { gemini, deepseek, kimi, openai, anthropic } = config;
   const clients = [
-    new GeminiClient({ apiKey: gemini.apiKey, model: gemini.model, backend: gemini.backend, apiBase: gemini.apiBase, ...common }),
+    new GeminiClient({ apiKey: gemini.apiKey, model: gemini.model, fallbackModels: gemini.fallbackModels, backend: gemini.backend, apiBase: gemini.apiBase, ...common }),
     new OpenAICompatClient({
       provider: 'deepseek',
       apiKey: deepseek.apiKey,
