@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/server.tsbuildinfo",
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": [
+        "shared/*"
+      ]
+    }
+  },
+  "include": [
+    "server/src",
+    "shared",
+    "vite.config.ts",
+    "capacitor.config.ts"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node",
+      "vite/client",
+      "vite-plugin-pwa/client"
+    ],
+    "baseUrl": ".",
+    "allowJs": true,
+    "checkJs": false,
+    "paths": {
+      "@/*": [
+        "client/src/*"
+      ],
+      "@shared/*": [
+        "shared/*"
+      ]
+    },
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "tests",
+    "client/src",
+    "shared",
+    "server/src",
+    "vitest.config.ts"
+  ]
+}
