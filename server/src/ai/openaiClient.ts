@@ -9,7 +9,7 @@ import { toGeminiSchema } from './jsonSchema';
 import { capabilityOf, generateValidatedJson, type ModelClient, type ModelJsonRequest, type ModelPart, type ModelUsage } from './modelClient';
 
 export interface OpenAICompatOptions {
-  provider: 'deepseek' | 'kimi';
+  provider: 'deepseek' | 'kimi' | 'openai';
   apiKey: string | undefined;
   apiBase: string;
   /** Tried in order when the current base rejects the key (Kimi keys only work in their own region). */
@@ -28,6 +28,8 @@ export interface OpenAICompatOptions {
   /** Sent as `thinking: { type }`; omitted when undefined. */
   thinking?: 'enabled' | 'disabled';
   maxOutputTokens: number;
+  /** OpenAI's newer models reject `max_tokens`. */
+  tokenParam?: 'max_tokens' | 'max_completion_tokens';
   /** Extra guidance attached to "API key invalid" errors. */
   keyHint?: string;
   timeoutMs: number;
@@ -63,7 +65,7 @@ export function jsonModeSystemPrompt(system: string, schemaText: string): string
 }
 
 export class OpenAICompatClient implements ModelClient {
-  readonly provider: 'deepseek' | 'kimi';
+  readonly provider: 'deepseek' | 'kimi' | 'openai';
   private readonly label: string;
   private base: string;
   private readonly alternates: string[];
@@ -142,9 +144,9 @@ export class OpenAICompatClient implements ModelClient {
         { role: 'user', content: userContent(req.parts) },
       ],
       response_format: { type: 'json_object' },
-      max_tokens: req.maxOutputTokens ?? this.opts.maxOutputTokens,
       stream: false,
     };
+    body[this.opts.tokenParam ?? 'max_tokens'] = req.maxOutputTokens ?? this.opts.maxOutputTokens;
     if (this.opts.sendTemperature && req.temperature !== undefined) body.temperature = req.temperature;
     if (this.opts.thinking) body.thinking = { type: this.opts.thinking };
 

@@ -73,11 +73,11 @@ describe('API key protection', () => {
   it('no real server secret from the local .env appears in any publishable file', () => {
     expect(scanTreeForValues(ROOT, secretValuesFromEnvFile(join(ROOT, '.env')))).toEqual([]);
   });
-  it.each(['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'MOONSHOT_API_KEY'])('reads %s only in the server configuration module', (name) => {
+  it.each(['GEMINI_API_KEY', 'DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'MOONSHOT_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY'])('reads %s only in the server configuration module', (name) => {
     const reads = new RegExp(`\\benv\\.${name}|env\\[['"]${name}`);
     const readers = files(join(ROOT, 'server', 'src')).filter((f) => reads.test(readFileSync(f, 'utf8')));
     expect(readers.map((f) => f.replace(ROOT, ''))).toEqual([join('/server', 'src', 'config.ts')]);
-    const clientRefs = files(join(ROOT, 'client', 'src')).filter((f) => /process\.env\.|import\.meta\.env\.[A-Z_]*(GEMINI|DEEPSEEK|KIMI|MOONSHOT)/.test(readFileSync(f, 'utf8')));
+    const clientRefs = files(join(ROOT, 'client', 'src')).filter((f) => /process\.env\.|import\.meta\.env\.[A-Z_]*(GEMINI|DEEPSEEK|KIMI|MOONSHOT|OPENAI|ANTHROPIC)/.test(readFileSync(f, 'utf8')));
     expect(clientRefs).toEqual([]);
   });
   it('the browser only ever calls the PRECEPTOR backend', () => {

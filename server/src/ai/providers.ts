@@ -1,6 +1,7 @@
 // Builds the provider chain from the server configuration. Each provider is
 // independent: a missing key simply leaves that provider "not configured".
 import type { ServerConfig } from '../config';
+import { AnthropicClient } from './anthropicClient';
 import { GeminiClient } from './geminiClient';
 import { ModelService } from './ModelService';
 import { OpenAICompatClient } from './openaiClient';
@@ -8,6 +9,7 @@ import { AIRouter } from './router';
 
 /** Used only when the default model is not offered to the key (e.g. after a model retirement). */
 export const DEEPSEEK_MODEL_FAMILIES = [/^deepseek-v(\d+(?:\.\d+)*)-flash$/, /^deepseek-flash$/, /^deepseek-chat$/];
+export const OPENAI_MODEL_FAMILIES = [/^gpt-(\d+(?:\.\d+)*)-mini$/];
 export const KIMI_MODEL_FAMILIES = [/^kimi-k(\d+(?:\.\d+)*)$/, /^kimi-latest$/];
 
 const KIMI_KEY_HINT =
@@ -15,7 +17,7 @@ const KIMI_KEY_HINT =
 
 export function buildRouter(config: ServerConfig, log?: (msg: string) => void): AIRouter {
   const common = { timeoutMs: config.aiTimeoutMs, maxRetries: config.aiMaxRetries, log };
-  const { gemini, deepseek, kimi } = config;
+  const { gemini, deepseek, kimi, openai, anthropic } = config;
   const clients = [
     new GeminiClient({ apiKey: gemini.apiKey, model: gemini.model, backend: gemini.backend, apiBase: gemini.apiBase, ...common }),
     new OpenAICompatClient({
@@ -45,6 +47,19 @@ export function buildRouter(config: ServerConfig, log?: (msg: string) => void): 
       keyHint: KIMI_KEY_HINT,
       ...common,
     }),
+    new OpenAICompatClient({
+      provider: 'openai',
+      apiKey: openai.apiKey,
+      apiBase: openai.apiBase,
+      model: openai.model,
+      autoModel: openai.modelIsDefault ? OPENAI_MODEL_FAMILIES : undefined,
+      vision: true,
+      sendTemperature: false,
+      tokenParam: 'max_completion_tokens',
+      maxOutputTokens: 16_384,
+      ...common,
+    }),
+    new AnthropicClient({ apiKey: anthropic.apiKey, apiBase: anthropic.apiBase, model: anthropic.model, maxOutputTokens: 16_384, ...common }),
   ];
   return new AIRouter(
     clients.map((c) => new ModelService(c)),

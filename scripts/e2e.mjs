@@ -94,7 +94,7 @@ async function next(page, label) {
 async function run() {
   console.log('\nPRECEPTOR end-to-end workflow\n');
   // No provider keys at all, even if a local .env has some (empty values are not overridden by .env).
-  const A = await startServer(8791, { GEMINI_API_KEY: '', DEEPSEEK_API_KEY: '', KIMI_API_KEY: '', MOONSHOT_API_KEY: '' });
+  const A = await startServer(8791, { GEMINI_API_KEY: '', DEEPSEEK_API_KEY: '', KIMI_API_KEY: '', MOONSHOT_API_KEY: '', OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '' });
   // Fake microphone so the voice-note path (MediaRecorder → WAV → transcription) runs headless.
   const launchArgs = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'];
   const browser = await chromium.launch({ args: launchArgs, ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}) });
@@ -380,13 +380,13 @@ async function run() {
   await step('21 · No client-side API key; browser only talks to /api', async () => {
     const r = spawnSync(process.execPath, ['scripts/check-secrets.mjs'], { cwd: ROOT, encoding: 'utf8' });
     assert(r.status === 0, r.stderr || r.stdout);
-    const direct = requests.filter((u) => /googleapis\.com|gemini|deepseek|moonshot|kimi/i.test(new URL(u).host));
+    const direct = requests.filter((u) => /googleapis\.com|gemini|deepseek|moonshot|kimi|openai|anthropic/i.test(new URL(u).host));
     assert(direct.length === 0, `browser contacted an AI provider directly: ${direct[0]}`);
     const scripts = [...new Set(requests.filter((u) => u.endsWith('.js')))];
     for (const s of scripts) {
       const body = await (await fetch(s)).text();
-      assert(!/AIza[0-9A-Za-z_-]{30,}|\bAQ\.[0-9A-Za-z_-]{30,}|\bsk-[A-Za-z0-9]{32,}/.test(body), `key pattern in ${s}`);
-      assert(!/generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com|api\.deepseek\.com|api\.moonshot\./.test(body), `provider host in ${s}`);
+      assert(!/AIza[0-9A-Za-z_-]{30,}|\bAQ\.[0-9A-Za-z_-]{30,}|\bsk-[A-Za-z0-9]{32,}|\bsk-(proj|ant)-[A-Za-z0-9_-]{20,}/.test(body), `key pattern in ${s}`);
+      assert(!/generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com|api\.deepseek\.com|api\.moonshot\.|api\.openai\.com|api\.anthropic\.com/.test(body), `provider host in ${s}`);
     }
     const ai = requests.filter((u) => u.includes('/api/ai/'));
     assert(ai.length > 10, 'expected AI calls through the backend');

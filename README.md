@@ -1,6 +1,6 @@
 # PRECEPTOR — Digital Clinical Pharmacy Preceptor
 
-An AI clinical-pharmacy rotation copilot that teaches trainees to **think like a hospital clinical pharmacist**. It is a standalone full-stack web app / installable PWA with a secure multi-provider AI backend (**Gemini**, **DeepSeek**, **Kimi**) with automatic failover, packaged for Android with Capacitor.
+An AI clinical-pharmacy rotation copilot that teaches trainees to **think like a hospital clinical pharmacist**. It is a standalone full-stack web app / installable PWA with a secure multi-provider AI backend (**Gemini**, **DeepSeek**, **Kimi**, **OpenAI**, **Claude**) with automatic failover, packaged for Android with Capacitor.
 
 ```
 COLLECT → UNDERSTAND → ASSESS → ACT → MONITOR → FOLLOW UP → REFLECT
@@ -63,7 +63,7 @@ Design decisions:
 
 - **Provider keys live only on the server.** `GEMINI_API_KEY`, `DEEPSEEK_API_KEY` and `KIMI_API_KEY` are read in one place (`server/src/config.ts`), sent only in request headers, redacted from logs, and never returned by any endpoint. Automated checks fail the build if a key pattern (`AIza…`, `AQ.…`, `sk-…`), a key assignment, a `VITE_*KEY` variable or a direct call to a provider host appears in client code or the built bundle, and if the value of any real secret in `.env` appears in any publishable file (git tree or build output).
 - **Local-first case data.** Cases, images and all clinical records live in IndexedDB on the device (Dexie). Everything except AI analysis works offline. The server stores only a technical AI log (time, action, model, anonymous case code, status, latency).
-- **Provider abstraction with failover.** Routes depend on `AIProvider` (`server/src/ai/AIProvider.ts`). `AIRouter` sends each task to the first configured provider that can read its input — voice notes need Gemini, page images Gemini or Kimi, text any provider — in `AI_PROVIDER_ORDER`, starting with the provider the user prefers in Settings. A failure (bad key, quota, outage, unreachable host, output that fails validation) falls through to the next provider, bounded by a time budget. Every result names the provider and model that produced it (shown on the AI draft banner); after a failover the banner says why. Models are configured on the server, never hard-coded in the client.
+- **Provider abstraction with failover.** Routes depend on `AIProvider` (`server/src/ai/AIProvider.ts`). `AIRouter` sends each task to the first configured provider that can read its input — voice notes need Gemini, page images Gemini, Kimi, OpenAI or Claude, text any provider — in `AI_PROVIDER_ORDER`, starting with the provider the user prefers in Settings. A failure (bad key, quota, outage, unreachable host, output that fails validation) falls through to the next provider, bounded by a time budget. Every result names the provider and model that produced it (shown on the AI draft banner); after a failover the banner says why. Models are configured on the server, never hard-coded in the client.
 - **Specialised prompts** (`server/src/ai/prompts.ts`) for each task: image analysis/transcription, patient data, medications, labs, timeline, case analysis, DRP analysis, clinical discussion, monitoring, follow-up, round notes, presentation, teaching questions, reasoning evaluation, Socratic dialogue, presentation defence, synthetic case generation, lessons, voice transcription.
 - **Structured output, validated twice.** Every provider is asked for JSON matching a zod-derived schema (Gemini through `responseJsonSchema`; DeepSeek and Kimi through JSON mode with the schema in the system prompt); the server re-validates (with one repair attempt), applies guards, validates again, and the client validates once more before rendering. Invalid output is shown as *AI RESPONSE COULD NOT BE VALIDATED*, never as clinical content.
 - **Same engine for real cases and training**, adapted per department (22 department profiles drive data checks, DRP prompts, monitoring priorities and learning topics).
@@ -106,7 +106,9 @@ All variables are **server-side**. Nothing here is bundled into the browser or t
 | `KIMI_MODEL` / `KIMI_VISION_MODEL` | `kimi-k2.6` / same | Kimi model for text / for page images. A missing default falls back to the newest `kimi-k*` the key lists. |
 | `KIMI_API_BASE` | international, then China | Keys only work in their own region. Unset: `https://api.moonshot.ai/v1`, retried on `https://api.moonshot.cn/v1` if the key is rejected. |
 | `KIMI_THINKING` | `disabled` | `enabled` turns on Kimi's thinking mode (slower). |
-| `AI_PROVIDER_ORDER` | `gemini,deepseek,kimi` | Failover order for automatic mode. Unlisted providers come last. |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | — / `gpt-5-mini` | OpenAI key (text and page images). Without an explicit model the newest `gpt-*-mini` the key offers is used if the default is missing. |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | — / `claude-sonnet-5-5` | Claude key (text and page images; answers are forced through a schema tool). |
+| `AI_PROVIDER_ORDER` | `gemini,deepseek,kimi,openai,anthropic` | Failover order for automatic mode. Unlisted providers come last. |
 | `PORT` | `8787` | API (and built PWA) port. |
 | `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:4173,https://localhost,capacitor://localhost` | Browser origins allowed by CORS. Same-origin requests always work. `https://localhost` is the Capacitor Android origin. |
 | `APP_ACCESS_TOKEN` | — | Optional shared access code; when set, `/api/ai/*` requires `Authorization: Bearer <code>` (entered once in Settings → Server). Protects your AI quotas on a public deployment. It is **not** a provider key. |
@@ -282,7 +284,7 @@ The E2E test (`scripts/e2e.mjs`) starts the production server and drives a phone
 | DEEPSEEK / KIMI BILLING REQUIRED | The account has no credit left. Top it up in the provider console. |
 | *PROVIDER* SERVICE UNAVAILABLE | Provider-side overload (5xx) after automatic retries. Retry later; the router already tried the other providers. |
 | CANNOT REACH *PROVIDER* | The server cannot connect to that provider's host (no internet, DNS, firewall or egress policy). Allow `generativelanguage.googleapis.com`, `api.deepseek.com`, `api.moonshot.ai` / `api.moonshot.cn` as needed. |
-| NO AI PROVIDER FOR THIS INPUT | Voice notes need a Gemini key; page images need Gemini or Kimi. |
+| NO AI PROVIDER FOR THIS INPUT | Voice notes need a Gemini key; page images need Gemini, Kimi, OpenAI or Claude. |
 | AI RESPONSE COULD NOT BE VALIDATED | The model's JSON failed validation even after a repair attempt. Retry; nothing invalid was shown. |
 | AI SERVICE UNAVAILABLE (offline) | No connection to the PRECEPTOR server. Everything except AI keeps working. In the Android app, set the server URL in Settings → Server. |
 | SERVER ACCESS CODE REQUIRED | The server has `APP_ACCESS_TOKEN`; enter it in Settings → Server. |

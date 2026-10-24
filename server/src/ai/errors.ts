@@ -150,6 +150,7 @@ export function mapOpenAICompatError(provider: ModelProviderName, status: number
     status === 402 ||
     text.includes('insufficient balance') ||
     text.includes('insufficient_quota') ||
+    text.includes('credit balance') ||
     text.includes('exceeded_current_quota') ||
     text.includes('account balance') ||
     text.includes('suspended')

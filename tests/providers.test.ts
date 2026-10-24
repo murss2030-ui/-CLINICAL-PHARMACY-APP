@@ -276,7 +276,7 @@ describe('AI router (failover and capability routing)', () => {
 describe('provider configuration', () => {
   it('reads keys, defaults and the failover order from the environment', () => {
     const c = readConfig({ GEMINI_API_KEY: ' g ', DEEPSEEK_API_KEY: 'd', MOONSHOT_API_KEY: 'k', AI_PROVIDER_ORDER: 'moonshot, deepseek, nonsense' });
-    expect(c.providerOrder).toEqual(['kimi', 'deepseek', 'gemini']);
+    expect(c.providerOrder).toEqual(['kimi', 'deepseek', 'gemini', 'openai', 'anthropic']);
     expect(c.gemini).toMatchObject({ apiKey: 'g', backend: 'studio', apiBase: 'https://generativelanguage.googleapis.com/v1beta' });
     expect(c.deepseek).toMatchObject({ apiKey: 'd', model: 'deepseek-v4-flash', modelIsDefault: true, apiBase: 'https://api.deepseek.com', thinking: 'disabled' });
     expect(c.kimi).toMatchObject({ apiKey: 'k', model: 'kimi-k2.6', apiBase: 'https://api.moonshot.ai/v1', alternateBases: ['https://api.moonshot.cn/v1'] });
@@ -291,7 +291,7 @@ describe('provider configuration', () => {
 
   it('builds all three providers; only those with keys are configured', () => {
     const r = buildRouter(readConfig({ DEEPSEEK_API_KEY: 'sk-x', AI_PROVIDER_ORDER: 'deepseek' }));
-    expect(r.order).toEqual(['deepseek', 'gemini', 'kimi']);
+    expect(r.order).toEqual(['deepseek', 'gemini', 'kimi', 'openai', 'anthropic']);
     expect(r.configured).toBe(true);
     expect(r.name).toBe('deepseek');
   });
@@ -308,6 +308,57 @@ describe('error wording', () => {
     expect(describeAIError('AI_KEY_INVALID', 'gemini').title).toBe('GEMINI API KEY INVALID');
     expect(describeAIError('AI_QUOTA_EXCEEDED', 'deepseek').title).toBe('DEEPSEEK QUOTA EXCEEDED');
     expect(describeAIError('AI_KEY_NOT_CONFIGURED', 'kimi').message).toMatch(/KIMI_API_KEY/);
-    expect(describeAIError('AI_KEY_NOT_CONFIGURED').message).toMatch(/GEMINI_API_KEY, DEEPSEEK_API_KEY or KIMI_API_KEY/);
+    expect(describeAIError('AI_KEY_NOT_CONFIGURED').message).toMatch(/GEMINI_API_KEY, DEEPSEEK_API_KEY, KIMI_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY/);
+  });
+});
+
+import { AnthropicClient } from '../server/src/ai/anthropicClient';
+
+const claude = (fetchImpl: typeof fetch) =>
+  new AnthropicClient({ apiKey: 'sk-ant-test0000000000000000', apiBase: 'https://claude.invalid/v1', model: 'claude-test', maxOutputTokens: 1000, timeoutMs: 2000, maxRetries: 1, fetchImpl, sleep: async () => undefined });
+const toolReply = (input: unknown, stop = 'tool_use') => new Response(JSON.stringify({ content: [{ type: 'tool_use', input }], stop_reason: stop, usage: { input_tokens: 5, output_tokens: 3 } }), { status: 200 });
+
+describe('Claude client (Anthropic Messages API)', () => {
+  it('sends x-api-key, forces the schema tool and reads the structured answer', async () => {
+    const f = vi.fn().mockImplementation(async () => toolReply({ answer: 'ok' }));
+    await expect(claude(f).generateJson({ ...req, parts: [{ text: 'q' }, { inlineData: { mimeType: 'image/png', data: 'QUJD' } }] })).resolves.toMatchObject({ data: { answer: 'ok' } });
+    const [url, init] = f.mock.calls[0]!;
+    expect(String(url)).toBe('https://claude.invalid/v1/messages');
+    expect(init.headers['x-api-key']).toBe('sk-ant-test0000000000000000');
+    expect(init.headers['anthropic-version']).toBe('2023-06-01');
+    const body = JSON.parse(init.body);
+    expect(body.tool_choice).toEqual({ type: 'tool', name: 'submit_answer' });
+    expect(body.tools[0].input_schema.properties).toHaveProperty('answer');
+    expect(body).not.toHaveProperty('temperature');
+    expect(body.messages[0].content[1]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'QUJD' } });
+  });
+  it('refuses audio and unsupported image types without calling Claude', async () => {
+    const f = vi.fn();
+    await expect(claude(f as never).generateJson({ ...req, parts: [{ inlineData: { mimeType: 'audio/wav', data: 'QUJD' } }] })).rejects.toMatchObject({ code: 'AI_CAPABILITY_UNAVAILABLE' });
+    await expect(claude(f as never).generateJson({ ...req, parts: [{ inlineData: { mimeType: 'image/heic', data: 'QUJD' } }] })).rejects.toMatchObject({ code: 'AI_CAPABILITY_UNAVAILABLE' });
+    expect(f).not.toHaveBeenCalled();
+  });
+  it.each([
+    [401, 'authentication_error', 'invalid x-api-key', 'AI_KEY_INVALID'],
+    [400, 'invalid_request_error', 'Your credit balance is too low to access the Anthropic API', 'AI_BILLING_REQUIRED'],
+    [429, 'rate_limit_error', 'rate limited', 'AI_QUOTA_EXCEEDED'],
+    [529, 'overloaded_error', 'Overloaded', 'AI_SERVICE_UNAVAILABLE'],
+    [404, 'not_found_error', 'model: claude-x', 'AI_MODEL_NOT_FOUND'],
+  ] as const)('HTTP %i %s → %s', async (status, type, message, code) => {
+    const f = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ type: 'error', error: { type, message } }), { status }));
+    await expect(claude(f).generateJson(req)).rejects.toMatchObject({ code, provider: 'anthropic' });
+  });
+  it('repairs a wrong answer once and reports a refusal as blocked', async () => {
+    const f = vi.fn().mockResolvedValueOnce(toolReply({ wrong: 1 })).mockResolvedValueOnce(toolReply({ answer: 'fixed' }));
+    await expect(claude(f).generateJson(req)).resolves.toMatchObject({ data: { answer: 'fixed' } });
+    await expect(claude(vi.fn().mockImplementation(async () => toolReply({}, 'refusal'))).generateJson(req)).rejects.toMatchObject({ code: 'AI_BLOCKED' });
+  });
+  it('OpenAI models get max_completion_tokens and no temperature', async () => {
+    const f = vi.fn().mockImplementation(async () => chat('{"answer":"ok"}'));
+    await kimi(f, { provider: 'openai', tokenParam: 'max_completion_tokens', thinking: undefined }).generateJson(req);
+    const body = JSON.parse(f.mock.calls[0]![1].body);
+    expect(body.max_completion_tokens).toBe(1000);
+    expect(body).not.toHaveProperty('max_tokens');
+    expect(body).not.toHaveProperty('thinking');
   });
 });

@@ -1,5 +1,5 @@
 // Server configuration. This is the ONLY place that reads the AI provider
-// keys (GEMINI_API_KEY, DEEPSEEK_API_KEY, KIMI_API_KEY). Keys are held in
+// keys (GEMINI, DEEPSEEK, KIMI, OPENAI and ANTHROPIC _API_KEY). Keys are held in
 // memory, never logged, and never returned by any route.
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -22,6 +22,8 @@ export interface ServerConfig {
   gemini: ProviderConfig & { backend: GeminiBackend };
   deepseek: ProviderConfig & { thinking: ThinkingMode };
   kimi: ProviderConfig & { visionModel: string | undefined; alternateBases: string[]; thinking: ThinkingMode };
+  openai: ProviderConfig;
+  anthropic: ProviderConfig;
   providerOrder: ModelProviderName[];
   allowedOrigins: string[];
   accessToken: string | undefined;
@@ -36,6 +38,8 @@ export interface ServerConfig {
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
 export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 export const DEFAULT_KIMI_MODEL = 'kimi-k2.6';
+export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini';
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5-5';
 export const KIMI_API_BASES = ['https://api.moonshot.ai/v1', 'https://api.moonshot.cn/v1'];
 
 function int(value: string | undefined, fallback: number, min: number, max: number): number {
@@ -109,6 +113,18 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       // Without an explicit base, a key rejected by the international endpoint is retried on the China endpoint.
       alternateBases: kimiBase ? [] : KIMI_API_BASES.slice(1),
       thinking: thinking(env.KIMI_THINKING),
+    },
+    openai: {
+      apiKey: text(env.OPENAI_API_KEY),
+      model: text(env.OPENAI_MODEL) ?? DEFAULT_OPENAI_MODEL,
+      modelIsDefault: !text(env.OPENAI_MODEL),
+      apiBase: text(env.OPENAI_API_BASE) ?? 'https://api.openai.com/v1',
+    },
+    anthropic: {
+      apiKey: text(env.ANTHROPIC_API_KEY),
+      model: text(env.ANTHROPIC_MODEL) ?? DEFAULT_ANTHROPIC_MODEL,
+      modelIsDefault: !text(env.ANTHROPIC_MODEL),
+      apiBase: text(env.ANTHROPIC_API_BASE) ?? 'https://api.anthropic.com/v1',
     },
     providerOrder: providerOrder(env.AI_PROVIDER_ORDER),
     allowedOrigins: (env.ALLOWED_ORIGINS ?? 'http://localhost:5173,http://localhost:4173,https://localhost,capacitor://localhost')

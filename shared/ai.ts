@@ -528,7 +528,7 @@ export type Transcription = z.infer<typeof transcriptionSchema>;
 // ───────────────────────── providers ─────────────────────────
 
 /** Model providers the server can route to. Their keys exist only in the server environment. */
-export const MODEL_PROVIDERS = ['gemini', 'deepseek', 'kimi'] as const;
+export const MODEL_PROVIDERS = ['gemini', 'deepseek', 'kimi', 'openai', 'anthropic'] as const;
 export type ModelProviderName = (typeof MODEL_PROVIDERS)[number];
 export type AIProviderName = ModelProviderName | 'demo';
 
@@ -539,6 +539,8 @@ export const PROVIDER_INFO: Record<ModelProviderName, { label: string; keyEnv: s
   gemini: { label: 'Gemini', keyEnv: 'GEMINI_API_KEY', modelEnv: 'GEMINI_MODEL', account: 'Google AI Studio / Google Cloud' },
   deepseek: { label: 'DeepSeek', keyEnv: 'DEEPSEEK_API_KEY', modelEnv: 'DEEPSEEK_MODEL', account: 'DeepSeek platform' },
   kimi: { label: 'Kimi', keyEnv: 'KIMI_API_KEY', modelEnv: 'KIMI_MODEL', account: 'Kimi (Moonshot AI) platform' },
+  openai: { label: 'OpenAI', keyEnv: 'OPENAI_API_KEY', modelEnv: 'OPENAI_MODEL', account: 'OpenAI platform' },
+  anthropic: { label: 'Claude', keyEnv: 'ANTHROPIC_API_KEY', modelEnv: 'ANTHROPIC_MODEL', account: 'Anthropic Console' },
 };
 
 export const CAPABILITY_LABELS: Record<AICapability, string> = { text: 'Text', vision: 'Images', audio: 'Voice' };
@@ -648,7 +650,7 @@ export const AI_ERROR_MESSAGES: Record<AIErrorCode, { title: string; message: st
   },
   AI_CAPABILITY_UNAVAILABLE: {
     title: 'NO AI PROVIDER FOR THIS INPUT',
-    message: 'None of the AI providers configured on the server can process this kind of input (voice notes need Gemini; images need Gemini or Kimi). Continue manually.',
+    message: 'None of the AI providers configured on the server can process this kind of input (voice notes need Gemini; images need Gemini, Kimi, OpenAI or Claude). Continue manually.',
     retryable: false,
   },
   AI_TIMEOUT: { title: 'AI REQUEST TIMED OUT', message: 'The AI took too long to answer. Retry, or send fewer pages at once.', retryable: true },
@@ -682,7 +684,7 @@ const GENERIC_FILL = {
   PROVIDER: 'AI',
   Provider: 'The AI provider',
   provider: 'the AI provider',
-  key: 'a provider key (GEMINI_API_KEY, DEEPSEEK_API_KEY or KIMI_API_KEY)',
+  key: 'a provider key (GEMINI_API_KEY, DEEPSEEK_API_KEY, KIMI_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY)',
   model: 'the model setting',
   account: 'AI provider',
 };
